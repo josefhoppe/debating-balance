@@ -45,6 +45,22 @@ export function buildHistogram(samples: number[], tail: Tail): HistogramData {
   return { values, percents: probs.map((p) => p * 100), rejected, critical, criticalMass }
 }
 
+/** One-sided p-value of an observed total, in the direction of the rejection region. */
+export function pValue(data: HistogramData, tail: Tail, observed: number): number {
+  let sum = 0
+  data.values.forEach((v, i) => {
+    if (tail === 'upper' ? v >= observed : v <= observed) sum += data.percents[i]
+  })
+  return sum / 100
+}
+
+export type Observed = {
+  /** Observed total points. */
+  value: number
+  /** Name of the position(s) that achieved it. */
+  name: string
+}
+
 type Props = {
   title: string
   xLabel: string
@@ -52,14 +68,17 @@ type Props = {
   data: HistogramData
   /** Number of rooms; x labels show total points divided by this (average per room). */
   rooms: number
+  observed?: Observed
 }
 
 function formatAvg(total: number, rooms: number): string {
   return Number((total / rooms).toFixed(2)).toString()
 }
 
-export default function Histogram({ title, xLabel, tail, data, rooms }: Props) {
+export default function Histogram({ title, xLabel, tail, data, rooms, observed }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const obsValue = observed?.value
+  const obsName = observed?.name
 
   useEffect(() => {
     let cancelled = false
@@ -80,6 +99,21 @@ export default function Histogram({ title, xLabel, tail, data, rooms }: Props) {
         ]),
         hovertemplate: `avg ${xLabel} = %{customdata[0]} (total %{x})<br>%{y:.3f}%<br>%{customdata[1]}<extra></extra>`,
       }
+      const traces: Plotly.Data[] = [trace]
+      if (obsValue !== undefined) {
+        // A vertical line built from many points so hovering anywhere along it shows the label.
+        const top = Math.max(...data.percents) * 1.05
+        const n = 30
+        const ys = Array.from({ length: n + 1 }, (_, i) => (top * i) / n)
+        traces.push({
+          type: 'scatter',
+          mode: 'lines',
+          x: ys.map(() => obsValue),
+          y: ys,
+          line: { color: '#111', width: 2, dash: 'dash' },
+          hovertemplate: `Observed: ${obsName}<br>avg ${xLabel} = ${formatAvg(obsValue, rooms)} (total ${obsValue})<extra></extra>`,
+        })
+      }
       const layout: Partial<Plotly.Layout> = {
         title: { text: title },
         xaxis: {
@@ -92,13 +126,14 @@ export default function Histogram({ title, xLabel, tail, data, rooms }: Props) {
         bargap: 0.1,
         margin: { t: 50, r: 20, b: 50, l: 70 },
         showlegend: false,
+        hovermode: 'closest',
       }
-      Plotly.react(el, [trace], layout, { responsive: true, displaylogo: false })
+      Plotly.react(el, traces, layout, { responsive: true, displaylogo: false })
     })
     return () => {
       cancelled = true
     }
-  }, [title, xLabel, data, rooms])
+  }, [title, xLabel, data, rooms, obsValue, obsName])
 
   useEffect(() => {
     const el = ref.current
@@ -112,10 +147,15 @@ export default function Histogram({ title, xLabel, tail, data, rooms }: Props) {
       ? 'No value is extreme enough to reject at 5%.'
       : `Reject H₀ if ${xLabel} ${tail === 'upper' ? '≥' : '≤'} ${formatAvg(data.critical, rooms)} on average (total ${data.critical}; actual level ${(data.criticalMass * 100).toFixed(2)}%).`
 
+  const observedText =
+    observed &&
+    `Observed: ${observed.name} with ${formatAvg(observed.value, rooms)} on average (total ${observed.value}), one-sided p = ${(pValue(data, tail, observed.value) * 100).toFixed(2)}%.`
+
   return (
     <section className="w-full">
       <div ref={ref} className="w-full h-[400px]" />
       <p className="text-sm text-zinc-600 dark:text-zinc-400 px-2">{tailText}</p>
+      {observedText && <p className="text-sm font-medium px-2">{observedText}</p>}
     </section>
   )
 }

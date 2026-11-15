@@ -26,7 +26,7 @@ export function randomRound(rooms: number): Result[] {
     return result
 }
 
-const pairPositions = ['First', 'Second', 'Gov', 'Opp', 'Long', 'Short']
+const pairPositions = ['First Half', 'Second Half', 'Gov Bench', 'Opp Bench', 'Long Diagonal', 'Short Diagonal']
 
 export function calcStatistics(round: Result[]): RoundStatistics {
     var result: RoundStatistics = {
