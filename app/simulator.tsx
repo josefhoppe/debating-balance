@@ -246,8 +246,7 @@ export default function Simulator() {
             />
           </label>
           <p className="text-sm text-zinc-600">
-            Paste the tab- or comma-separated results of one round, including the header row. The columns{' '}
-            <code>result</code> and <code>side</code> are used.
+            Paste the tab- or comma-separated results of one round from Tabbycat, including the header row. Click 'view by team' and copy using the button to the right of the search field.
           </p>
           <textarea
             value={importText}
