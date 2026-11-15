@@ -50,15 +50,7 @@ export function calcStatistics(round: Result[]): RoundStatistics {
         result.co += room[3]
     }
 
-    let singleResults = [result.og, result.oo, result.cg, result.co]
-    result.best = Math.max(...singleResults)
-    result.bestName = RESULT_POSITIONS[singleResults.indexOf(result.best)]
-    result.worst = Math.min(...singleResults)
-    result.worstName = RESULT_POSITIONS[singleResults.indexOf(result.worst)]
-
-    let pairSums = [result.og + result.oo, result.cg + result.co, result.og + result.cg, result.oo + result.co, result.og + result.co, result.oo + result.cg]
-    result.bestTwo = Math.max(...pairSums)
-    result.bestTwoName = pairPositions[pairSums.indexOf(result.bestTwo)]
+    fillStatistics(result)
 
     return result
 }
@@ -70,5 +62,17 @@ export function simulateRound(rooms: number, runs: number): RoundStatistics[] {
         result.push(calcStatistics(round))
     }
     return result
+}
+
+export function fillStatistics(stats: RoundStatistics) {
+    let singleResults = [stats.og, stats.oo, stats.cg, stats.co]
+    stats.best = Math.max(...singleResults)
+    stats.bestName = RESULT_POSITIONS[singleResults.indexOf(stats.best)]
+    stats.worst = Math.min(...singleResults)
+    stats.worstName = RESULT_POSITIONS[singleResults.indexOf(stats.worst)]
+
+    let pairSums = [stats.og + stats.oo, stats.cg + stats.co, stats.og + stats.cg, stats.oo + stats.co, stats.og + stats.co, stats.oo + stats.cg]
+    stats.bestTwo = Math.max(...pairSums)
+    stats.bestTwoName = pairPositions[pairSums.indexOf(stats.bestTwo)]
 }
 
