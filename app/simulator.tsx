@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import Histogram, { buildHistogram, HistogramData, Observed } from './histogram'
+import Histogram, { benjaminiHochberg, buildHistogram, HistogramData, Observed, pValue, Tail } from './histogram'
 import { RoundStatistics, simulateRound } from './simulation'
 import { ImportedRound, parseTabbycat } from './tabbycat'
 
@@ -115,13 +115,33 @@ export default function Simulator() {
   }
 
   const observed = useMemo(() => {
-    const visible = results ? rounds.filter((r) => r.data.rooms === results.rooms) : []
-    const make = (pick: (s: RoundStatistics) => { value: number; name: string }): Observed[] =>
-      visible.map((r) => ({ round: r.name, ...roundStyle(r.slot), ...pick(r.data.stats) }))
+    const empty = { best: [], worst: [], bestTwo: [] }
+    if (!results) return empty
+    const visible = rounds.filter((r) => r.data.rooms === results.rooms)
+    const make = (
+      data: HistogramData,
+      tail: Tail,
+      pick: (s: RoundStatistics) => { value: number; name: string },
+    ): Omit<Observed, 'pAdjusted'>[] =>
+      visible.map((r) => {
+        const o = pick(r.data.stats)
+        return { round: r.name, ...roundStyle(r.slot), ...o, p: pValue(data, tail, o.value) }
+      })
+    const raw = {
+      best: make(results.best, 'upper', (s) => ({ value: s.best, name: s.bestName })),
+      worst: make(results.worst, 'lower', (s) => ({ value: s.worst, name: s.worstName })),
+      bestTwo: make(results.bestTwo, 'upper', (s) => ({ value: s.bestTwo, name: s.bestTwoName })),
+    }
+    // Correct across all tests of all rounds (three per round) with Benjamini-Hochberg.
+    const all = [...raw.best, ...raw.worst, ...raw.bestTwo]
+    const adjusted = benjaminiHochberg(all.map((o) => o.p))
+    let k = 0
+    const withAdjusted = (list: Omit<Observed, 'pAdjusted'>[]): Observed[] =>
+      list.map((o) => ({ ...o, pAdjusted: adjusted[k++] }))
     return {
-      best: make((s) => ({ value: s.best, name: s.bestName })),
-      worst: make((s) => ({ value: s.worst, name: s.worstName })),
-      bestTwo: make((s) => ({ value: s.bestTwo, name: s.bestTwoName })),
+      best: withAdjusted(raw.best),
+      worst: withAdjusted(raw.worst),
+      bestTwo: withAdjusted(raw.bestTwo),
     }
   }, [rounds, results])
 
@@ -271,8 +291,11 @@ export default function Simulator() {
         <>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {results.runs.toLocaleString()} simulated rounds with {results.rooms} room
-            {results.rooms === 1 ? '' : 's'}. Red bars mark the 5% rejection region
-            {observed.best.length > 0 ? '; colored lines mark the imported rounds' : ''}.
+            {results.rooms === 1 ? '' : 's'}. Red bars mark the uncorrected 5% rejection region of a single test
+            {observed.best.length > 0
+              ? '; colored lines mark the imported rounds. P-values are adjusted with Benjamini-Hochberg across all tests of all imported rounds (three per round); results with an adjusted p ≤ 5% are marked significant'
+              : ''}
+            .
           </p>
           <Histogram
             title="Best position (max points)"

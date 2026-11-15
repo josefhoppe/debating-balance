@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 
 export type Tail = 'upper' | 'lower'
 
-const ALPHA = 0.05
+export const ALPHA = 0.05
 const BLUE = '#2a6fdb'
 const RED = '#d62728'
 
@@ -45,6 +45,23 @@ export function buildHistogram(samples: number[], tail: Tail): HistogramData {
   return { values, percents: probs.map((p) => p * 100), rejected, critical, criticalMass }
 }
 
+/**
+ * Benjamini-Hochberg adjusted p-values, in the same order as the input.
+ * A hypothesis is rejected at FDR level α iff its adjusted p-value is ≤ α.
+ */
+export function benjaminiHochberg(pValues: number[]): number[] {
+  const m = pValues.length
+  const order = [...pValues.keys()].sort((a, b) => pValues[a] - pValues[b])
+  const adjusted = new Array<number>(m)
+  let min = 1
+  for (let rank = m; rank >= 1; rank--) {
+    const i = order[rank - 1]
+    min = Math.min(min, (pValues[i] * m) / rank)
+    adjusted[i] = min
+  }
+  return adjusted
+}
+
 /** One-sided p-value of an observed total, in the direction of the rejection region. */
 export function pValue(data: HistogramData, tail: Tail, observed: number): number {
   let sum = 0
@@ -63,6 +80,10 @@ export type Observed = {
   name: string
   color: string
   dash: string
+  /** Raw one-sided p-value. */
+  p: number
+  /** Benjamini-Hochberg adjusted p-value across all tests of all imported rounds. */
+  pAdjusted: number
 }
 
 type Props = {
@@ -174,8 +195,14 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
               <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: o.color }} />
               <span>
                 <span className="font-medium">{o.round}:</span> {o.name} with {formatAvg(o.value, rooms)} on
-                average (total {o.value}), one-sided p = {(pValue(data, tail, o.value) * 100).toFixed(2)}%.
+                average (total {o.value}), one-sided p = {(o.p * 100).toFixed(2)}%, BH-adjusted p ={' '}
+                {(o.pAdjusted * 100).toFixed(2)}%.
               </span>
+              {o.pAdjusted <= ALPHA && (
+                <span className="rounded-full bg-red-100 text-red-600 font-bold text-xs px-2 py-0.5">
+                  significant
+                </span>
+              )}
             </li>
           ))}
         </ul>
