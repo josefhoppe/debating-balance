@@ -55,10 +55,14 @@ export function pValue(data: HistogramData, tail: Tail, observed: number): numbe
 }
 
 export type Observed = {
+  /** Name of the imported round (legend label). */
+  round: string
   /** Observed total points. */
   value: number
   /** Name of the position(s) that achieved it. */
   name: string
+  color: string
+  dash: string
 }
 
 type Props = {
@@ -68,7 +72,8 @@ type Props = {
   data: HistogramData
   /** Number of rooms; x labels show total points divided by this (average per room). */
   rooms: number
-  observed?: Observed
+  /** Imported rounds to overlay as vertical lines. Pass a stable (memoized) array. */
+  observed: Observed[]
 }
 
 function formatAvg(total: number, rooms: number): string {
@@ -77,8 +82,6 @@ function formatAvg(total: number, rooms: number): string {
 
 export default function Histogram({ title, xLabel, tail, data, rooms, observed }: Props) {
   const ref = useRef<HTMLDivElement>(null)
-  const obsValue = observed?.value
-  const obsName = observed?.name
 
   useEffect(() => {
     let cancelled = false
@@ -92,6 +95,7 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
         type: 'bar',
         x: data.values,
         y: data.percents,
+        showlegend: false,
         marker: { color: data.rejected.map((r) => (r ? RED : BLUE)) },
         customdata: data.values.map((v, i) => [
           formatAvg(v, rooms),
@@ -100,18 +104,28 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
         hovertemplate: `avg ${xLabel} = %{customdata[0]} (total %{x})<br>%{y:.3f}%<br>%{customdata[1]}<extra></extra>`,
       }
       const traces: Plotly.Data[] = [trace]
-      if (obsValue !== undefined) {
-        // A vertical line built from many points so hovering anywhere along it shows the label.
-        const top = Math.max(...data.percents) * 1.05
-        const n = 30
-        const ys = Array.from({ length: n + 1 }, (_, i) => (top * i) / n)
+      // Vertical lines built from many points so hovering anywhere along them shows the label.
+      const top = Math.max(...data.percents) * 1.05
+      const n = 30
+      const ys = Array.from({ length: n + 1 }, (_, i) => (top * i) / n)
+      // Rounds with the same value would hide each other, so spread them across the bar's width.
+      const sameValue = new Map<number, number>()
+      for (const o of observed) sameValue.set(o.value, (sameValue.get(o.value) ?? 0) + 1)
+      const seen = new Map<number, number>()
+      for (const o of observed) {
+        const count = sameValue.get(o.value)!
+        const k = seen.get(o.value) ?? 0
+        seen.set(o.value, k + 1)
+        const spacing = Math.min(0.15, 0.8 / count)
+        const x = o.value + (k - (count - 1) / 2) * spacing
         traces.push({
           type: 'scatter',
           mode: 'lines',
-          x: ys.map(() => obsValue),
+          name: o.round,
+          x: ys.map(() => x),
           y: ys,
-          line: { color: '#111', width: 2, dash: 'dash' },
-          hovertemplate: `Observed: ${obsName}<br>avg ${xLabel} = ${formatAvg(obsValue, rooms)} (total ${obsValue})<extra></extra>`,
+          line: { color: o.color, width: 3, dash: o.dash as Plotly.Dash },
+          hovertemplate: `${o.round}: ${o.name}<br>avg ${xLabel} = ${formatAvg(o.value, rooms)} (total ${o.value})<extra></extra>`,
         })
       }
       const layout: Partial<Plotly.Layout> = {
@@ -124,8 +138,9 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
         },
         yaxis: { title: { text: 'Share of simulations' }, ticksuffix: '%', rangemode: 'tozero' },
         bargap: 0.1,
-        margin: { t: 50, r: 20, b: 50, l: 70 },
-        showlegend: false,
+        margin: { t: 80, r: 20, b: 50, l: 70 },
+        showlegend: observed.length > 0,
+        legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom' },
         hovermode: 'closest',
       }
       Plotly.react(el, traces, layout, { responsive: true, displaylogo: false })
@@ -133,7 +148,7 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
     return () => {
       cancelled = true
     }
-  }, [title, xLabel, data, rooms, obsValue, obsName])
+  }, [title, xLabel, data, rooms, observed])
 
   useEffect(() => {
     const el = ref.current
@@ -147,15 +162,24 @@ export default function Histogram({ title, xLabel, tail, data, rooms, observed }
       ? 'No value is extreme enough to reject at 5%.'
       : `Reject H₀ if ${xLabel} ${tail === 'upper' ? '≥' : '≤'} ${formatAvg(data.critical, rooms)} on average (total ${data.critical}; actual level ${(data.criticalMass * 100).toFixed(2)}%).`
 
-  const observedText =
-    observed &&
-    `Observed: ${observed.name} with ${formatAvg(observed.value, rooms)} on average (total ${observed.value}), one-sided p = ${(pValue(data, tail, observed.value) * 100).toFixed(2)}%.`
 
   return (
     <section className="w-full">
       <div ref={ref} className="w-full h-[400px]" />
       <p className="text-sm text-zinc-600 dark:text-zinc-400 px-2">{tailText}</p>
-      {observedText && <p className="text-sm font-medium px-2">{observedText}</p>}
+      {observed.length > 0 && (
+        <ul className="text-sm px-2 mt-1">
+          {observed.map((o) => (
+            <li key={o.round} className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: o.color }} />
+              <span>
+                <span className="font-medium">{o.round}:</span> {o.name} with {formatAvg(o.value, rooms)} on
+                average (total {o.value}), one-sided p = {(pValue(data, tail, o.value) * 100).toFixed(2)}%.
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
