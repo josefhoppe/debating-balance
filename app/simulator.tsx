@@ -83,9 +83,9 @@ export default function Simulator() {
             {results.runs.toLocaleString()} simulated rounds with {results.rooms} room
             {results.rooms === 1 ? '' : 's'}. Red bars mark the 5% rejection region.
           </p>
-          <Histogram title="Best position (max points)" xLabel="best" tail="upper" data={results.best} />
-          <Histogram title="Worst position (min points)" xLabel="worst" tail="lower" data={results.worst} />
-          <Histogram title="Best pair of positions (max points)" xLabel="bestTwo" tail="upper" data={results.bestTwo} />
+          <Histogram title="Best position (max points)" xLabel="best" tail="upper" data={results.best} rooms={results.rooms} />
+          <Histogram title="Worst position (min points)" xLabel="worst" tail="lower" data={results.worst} rooms={results.rooms} />
+          <Histogram title="Best pair of positions (max points)" xLabel="bestTwo" tail="upper" data={results.bestTwo} rooms={results.rooms} />
         </>
       )}
     </div>

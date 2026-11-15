@@ -50,14 +50,23 @@ type Props = {
   xLabel: string
   tail: Tail
   data: HistogramData
+  /** Number of rooms; x labels show total points divided by this (average per room). */
+  rooms: number
 }
 
-export default function Histogram({ title, xLabel, tail, data }: Props) {
+function formatAvg(total: number, rooms: number): string {
+  return Number((total / rooms).toFixed(2)).toString()
+}
+
+export default function Histogram({ title, xLabel, tail, data, rooms }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
     const el = ref.current
+    // Keep one bar per total; thin out tick labels so they don't collide.
+    const step = Math.ceil(data.values.length / 20)
+    const tickVals = data.values.filter((_, i) => i % step === 0)
     import('plotly.js-dist-min').then((Plotly) => {
       if (cancelled || !el) return
       const trace: Plotly.Data = {
@@ -65,12 +74,20 @@ export default function Histogram({ title, xLabel, tail, data }: Props) {
         x: data.values,
         y: data.percents,
         marker: { color: data.rejected.map((r) => (r ? RED : BLUE)) },
-        customdata: data.rejected.map((r) => (r ? 'rejection region' : '')),
-        hovertemplate: `${xLabel} = %{x}<br>%{y:.3f}%<br>%{customdata}<extra></extra>`,
+        customdata: data.values.map((v, i) => [
+          formatAvg(v, rooms),
+          data.rejected[i] ? 'rejection region' : '',
+        ]),
+        hovertemplate: `avg ${xLabel} = %{customdata[0]} (total %{x})<br>%{y:.3f}%<br>%{customdata[1]}<extra></extra>`,
       }
       const layout: Partial<Plotly.Layout> = {
         title: { text: title },
-        xaxis: { title: { text: xLabel }, dtick: 1 },
+        xaxis: {
+          title: { text: `Average ${xLabel} points per room` },
+          tickmode: 'array',
+          tickvals: tickVals,
+          ticktext: tickVals.map((v) => formatAvg(v, rooms)),
+        },
         yaxis: { title: { text: 'Share of simulations' }, ticksuffix: '%', rangemode: 'tozero' },
         bargap: 0.1,
         margin: { t: 50, r: 20, b: 50, l: 70 },
@@ -81,7 +98,7 @@ export default function Histogram({ title, xLabel, tail, data }: Props) {
     return () => {
       cancelled = true
     }
-  }, [title, xLabel, data])
+  }, [title, xLabel, data, rooms])
 
   useEffect(() => {
     const el = ref.current
@@ -93,7 +110,7 @@ export default function Histogram({ title, xLabel, tail, data }: Props) {
   const tailText =
     data.critical === undefined
       ? 'No value is extreme enough to reject at 5%.'
-      : `Reject H₀ if ${xLabel} ${tail === 'upper' ? '≥' : '≤'} ${data.critical} (actual level ${(data.criticalMass * 100).toFixed(2)}%).`
+      : `Reject H₀ if ${xLabel} ${tail === 'upper' ? '≥' : '≤'} ${formatAvg(data.critical, rooms)} on average (total ${data.critical}; actual level ${(data.criticalMass * 100).toFixed(2)}%).`
 
   return (
     <section className="w-full">
