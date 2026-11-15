@@ -1,5 +1,7 @@
 # Debate Balance Simulator
 
+The program is available [hosted on my website](https://hoppe.io/balancesim/).
+
 The simulator simulates debate outcomes to test a topic for imbalance.
 This works through different statistcis, namely the highest and lowest average points of any position, and the highest points any two positions got combined.
 
